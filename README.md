@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # BaruLogix - Plataforma de Gestión Logística
 
 ## 🚀 Descripción
@@ -108,3 +109,21 @@ Para soporte técnico, contactar al equipo de desarrollo.
 
 **BaruLogix** - Optimiza tu operación logística 📦✨
 
+=======
+## Hi there 👋
+
+<!--
+**BaruLogix/barulogix** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+
+Here are some ideas to get you started:
+
+- 🔭 I’m currently working on ...
+- 🌱 I’m currently learning ...
+- 👯 I’m looking to collaborate on ...
+- 🤔 I’m looking for help with ...
+- 💬 Ask me about ...
+- 📫 How to reach me: ...
+- 😄 Pronouns: ...
+- ⚡ Fun fact: ...
+-->
+>>>>>>> c2b8fdae11936ff5455eb35a81d30932c1d6ea85
