@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { 
   Truck, 
   Package, 
@@ -102,8 +103,14 @@ export default function DashboardPage() {
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
-            <div className="flex items-center">
-              <Truck className="h-8 w-8 text-blue-600 mr-3" />
+            <div className="flex items-center space-x-3">
+              <Image 
+                src="/logo.png" 
+                alt="BaruLogix Logo" 
+                width={40} 
+                height={40}
+                className="rounded-full"
+              />
               <h1 className="text-2xl font-bold text-gray-900">BaruLogix</h1>
             </div>
             

@@ -1,7 +1,7 @@
 // Modelos de base de datos para BaruLogix
 import mongoose from 'mongoose';
 
-// Esquema de Usuario
+// Esquema de Usuario con permisos completos de administrador
 const userSchema = new mongoose.Schema({
   email: {
     type: String,
@@ -24,6 +24,31 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['admin', 'user'],
     default: 'user'
+  },
+  company: { type: String },
+  phone: { type: String },
+  subscription: {
+    plan: { type: String, enum: ['free', 'pro', 'enterprise'], default: 'free' },
+    status: { type: String, enum: ['active', 'inactive', 'trial'], default: 'trial' },
+    startDate: { type: Date, default: Date.now },
+    endDate: { type: Date },
+    features: {
+      unlimitedDeliveries: { type: Boolean, default: false },
+      unlimitedConductors: { type: Boolean, default: false },
+      advancedReports: { type: Boolean, default: false },
+      apiAccess: { type: Boolean, default: false },
+      prioritySupport: { type: Boolean, default: false },
+      customBranding: { type: Boolean, default: false }
+    }
+  },
+  permissions: {
+    canViewAll: { type: Boolean, default: false },
+    canEditAll: { type: Boolean, default: false },
+    canDeleteAll: { type: Boolean, default: false },
+    canManageUsers: { type: Boolean, default: false },
+    canManageSettings: { type: Boolean, default: false },
+    canAccessReports: { type: Boolean, default: true },
+    canManagePayments: { type: Boolean, default: false }
   },
   subscriptionStatus: {
     type: String,

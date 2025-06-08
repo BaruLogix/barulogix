@@ -1,5 +1,6 @@
-import Link from 'next/link';
 import { Truck, Package, BarChart3, Shield, Users, CheckCircle } from 'lucide-react';
+import Link from 'next/link';
+import Image from 'next/image';
 
 export default function Home() {
   return (
@@ -8,8 +9,14 @@ export default function Home() {
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
-              <Truck className="h-8 w-8 text-blue-600 mr-3" />
+            <div className="flex items-center space-x-3">
+              <Image 
+                src="/logo.png" 
+                alt="BaruLogix Logo" 
+                width={50} 
+                height={50}
+                className="rounded-full"
+              />
               <h1 className="text-2xl font-bold text-gray-900">BaruLogix</h1>
             </div>
             <div className="flex space-x-4">
