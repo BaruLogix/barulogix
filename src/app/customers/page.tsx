@@ -5,42 +5,38 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 
-interface Conductor {
+interface Customer {
   id: string
   name: string
   email: string
   phone: string
-  license_number: string
-  license_type: string
-  vehicle_type: string
-  vehicle_plate: string
+  company: string
+  address: string
+  city: string
+  customer_type: string
   status: string
-  rating: number
-  total_deliveries: number
   created_at: string
 }
 
-export default function ConductorsPage() {
-  const [conductors, setConductors] = useState<Conductor[]>([])
+export default function CustomersPage() {
+  const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [editingConductor, setEditingConductor] = useState<Conductor | null>(null)
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
-    license_number: '',
-    license_type: 'B',
-    license_expiry: '',
-    vehicle_type: '',
-    vehicle_plate: '',
-    vehicle_model: '',
-    vehicle_year: '',
+    company: '',
     address: '',
-    emergency_contact_name: '',
-    emergency_contact_phone: '',
-    salary: '',
-    commission_rate: '',
+    city: '',
+    state: '',
+    postal_code: '',
+    country: 'Colombia',
+    customer_type: 'regular',
+    credit_limit: '',
+    payment_terms: '30',
+    tax_id: '',
     notes: ''
   })
   const [error, setError] = useState('')
@@ -55,18 +51,18 @@ export default function ConductorsPage() {
       return
     }
 
-    loadConductors()
+    loadCustomers()
   }, [router])
 
-  const loadConductors = async () => {
+  const loadCustomers = async () => {
     try {
-      const response = await fetch('/api/conductors')
+      const response = await fetch('/api/customers')
       const data = await response.json()
 
       if (response.ok) {
-        setConductors(data.conductors || [])
+        setCustomers(data.customers || [])
       } else {
-        setError(data.error || 'Error al cargar conductores')
+        setError(data.error || 'Error al cargar clientes')
       }
     } catch (error) {
       setError('Error de conexión')
@@ -81,10 +77,10 @@ export default function ConductorsPage() {
     setSuccess('')
 
     try {
-      const url = editingConductor ? '/api/conductors' : '/api/conductors'
-      const method = editingConductor ? 'PUT' : 'POST'
-      const body = editingConductor 
-        ? { ...formData, id: editingConductor.id }
+      const url = '/api/customers'
+      const method = editingCustomer ? 'PUT' : 'POST'
+      const body = editingCustomer 
+        ? { ...formData, id: editingCustomer.id }
         : formData
 
       const response = await fetch(url, {
@@ -100,47 +96,45 @@ export default function ConductorsPage() {
       if (response.ok) {
         setSuccess(data.message)
         setShowForm(false)
-        setEditingConductor(null)
+        setEditingCustomer(null)
         resetForm()
-        loadConductors()
+        loadCustomers()
       } else {
-        setError(data.error || 'Error al guardar conductor')
+        setError(data.error || 'Error al guardar cliente')
       }
     } catch (error) {
       setError('Error de conexión')
     }
   }
 
-  const handleEdit = (conductor: Conductor) => {
-    setEditingConductor(conductor)
+  const handleEdit = (customer: Customer) => {
+    setEditingCustomer(customer)
     setFormData({
-      name: conductor.name || '',
-      email: conductor.email || '',
-      phone: conductor.phone || '',
-      license_number: conductor.license_number || '',
-      license_type: conductor.license_type || 'B',
-      license_expiry: '',
-      vehicle_type: conductor.vehicle_type || '',
-      vehicle_plate: conductor.vehicle_plate || '',
-      vehicle_model: '',
-      vehicle_year: '',
-      address: '',
-      emergency_contact_name: '',
-      emergency_contact_phone: '',
-      salary: '',
-      commission_rate: '',
+      name: customer.name || '',
+      email: customer.email || '',
+      phone: customer.phone || '',
+      company: customer.company || '',
+      address: customer.address || '',
+      city: customer.city || '',
+      state: '',
+      postal_code: '',
+      country: 'Colombia',
+      customer_type: customer.customer_type || 'regular',
+      credit_limit: '',
+      payment_terms: '30',
+      tax_id: '',
       notes: ''
     })
     setShowForm(true)
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar este conductor?')) {
+    if (!confirm('¿Estás seguro de que quieres eliminar este cliente?')) {
       return
     }
 
     try {
-      const response = await fetch(`/api/conductors?id=${id}`, {
+      const response = await fetch(`/api/customers?id=${id}`, {
         method: 'DELETE',
       })
 
@@ -148,9 +142,9 @@ export default function ConductorsPage() {
 
       if (response.ok) {
         setSuccess(data.message)
-        loadConductors()
+        loadCustomers()
       } else {
-        setError(data.error || 'Error al eliminar conductor')
+        setError(data.error || 'Error al eliminar cliente')
       }
     } catch (error) {
       setError('Error de conexión')
@@ -162,37 +156,44 @@ export default function ConductorsPage() {
       name: '',
       email: '',
       phone: '',
-      license_number: '',
-      license_type: 'B',
-      license_expiry: '',
-      vehicle_type: '',
-      vehicle_plate: '',
-      vehicle_model: '',
-      vehicle_year: '',
+      company: '',
       address: '',
-      emergency_contact_name: '',
-      emergency_contact_phone: '',
-      salary: '',
-      commission_rate: '',
+      city: '',
+      state: '',
+      postal_code: '',
+      country: 'Colombia',
+      customer_type: 'regular',
+      credit_limit: '',
+      payment_terms: '30',
+      tax_id: '',
       notes: ''
     })
+  }
+
+  const getCustomerTypeColor = (type: string) => {
+    switch (type) {
+      case 'premium': return 'bg-yellow-100 text-yellow-800'
+      case 'corporate': return 'bg-purple-100 text-purple-800'
+      case 'regular': return 'bg-blue-100 text-blue-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getCustomerTypeText = (type: string) => {
+    switch (type) {
+      case 'premium': return '⭐ Premium'
+      case 'corporate': return '🏢 Corporativo'
+      case 'regular': return '👤 Regular'
+      default: return type
+    }
   }
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-800'
       case 'inactive': return 'bg-gray-100 text-gray-800'
-      case 'suspended': return 'bg-red-100 text-red-800'
+      case 'blocked': return 'bg-red-100 text-red-800'
       default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'active': return 'Activo'
-      case 'inactive': return 'Inactivo'
-      case 'suspended': return 'Suspendido'
-      default: return status
     }
   }
 
@@ -201,7 +202,7 @@ export default function ConductorsPage() {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando conductores...</p>
+          <p className="text-gray-600">Cargando clientes...</p>
         </div>
       </div>
     )
@@ -224,8 +225,8 @@ export default function ConductorsPage() {
                 />
               </Link>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">🚛 Conductores</h1>
-                <p className="text-sm text-gray-600">Gestión de equipo de conductores</p>
+                <h1 className="text-2xl font-bold text-gray-900">👥 Clientes</h1>
+                <p className="text-sm text-gray-600">Base de datos de clientes</p>
               </div>
             </div>
 
@@ -233,13 +234,13 @@ export default function ConductorsPage() {
               <button
                 onClick={() => {
                   setShowForm(true)
-                  setEditingConductor(null)
+                  setEditingCustomer(null)
                   resetForm()
                 }}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
               >
                 <span>➕</span>
-                <span>Nuevo Conductor</span>
+                <span>Nuevo Cliente</span>
               </button>
               
               <Link
@@ -272,7 +273,7 @@ export default function ConductorsPage() {
         {showForm && (
           <div className="mb-8 bg-white rounded-xl shadow-lg p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-4">
-              {editingConductor ? 'Editar Conductor' : 'Nuevo Conductor'}
+              {editingCustomer ? 'Editar Cliente' : 'Nuevo Cliente'}
             </h3>
             
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -286,17 +287,16 @@ export default function ConductorsPage() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Nombre del conductor"
+                  placeholder="Nombre del cliente"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email *
+                  Email
                 </label>
                 <input
                   type="email"
-                  required
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -319,74 +319,88 @@ export default function ConductorsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Número de Licencia *
+                  Empresa
+                </label>
+                <input
+                  type="text"
+                  value={formData.company}
+                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Nombre de la empresa"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Dirección *
                 </label>
                 <input
                   type="text"
                   required
-                  value={formData.license_number}
-                  onChange={(e) => setFormData({ ...formData, license_number: e.target.value })}
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="123456789"
+                  placeholder="Dirección completa"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tipo de Licencia
+                  Ciudad
+                </label>
+                <input
+                  type="text"
+                  value={formData.city}
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Ciudad"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tipo de Cliente
                 </label>
                 <select
-                  value={formData.license_type}
-                  onChange={(e) => setFormData({ ...formData, license_type: e.target.value })}
+                  value={formData.customer_type}
+                  onChange={(e) => setFormData({ ...formData, customer_type: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="A1">A1 - Motocicleta</option>
-                  <option value="A2">A2 - Motocicleta</option>
-                  <option value="B">B - Automóvil</option>
-                  <option value="C1">C1 - Camión liviano</option>
-                  <option value="C2">C2 - Camión pesado</option>
-                  <option value="C3">C3 - Camión articulado</option>
+                  <option value="regular">👤 Regular</option>
+                  <option value="premium">⭐ Premium</option>
+                  <option value="corporate">🏢 Corporativo</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tipo de Vehículo
-                </label>
-                <input
-                  type="text"
-                  value={formData.vehicle_type}
-                  onChange={(e) => setFormData({ ...formData, vehicle_type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Motocicleta, Camión, etc."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Placa del Vehículo
-                </label>
-                <input
-                  type="text"
-                  value={formData.vehicle_plate}
-                  onChange={(e) => setFormData({ ...formData, vehicle_plate: e.target.value.toUpperCase() })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="ABC123"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Salario Mensual
+                  Límite de Crédito
                 </label>
                 <input
                   type="number"
                   step="0.01"
-                  value={formData.salary}
-                  onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                  value={formData.credit_limit}
+                  onChange={(e) => setFormData({ ...formData, credit_limit: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="1500000"
+                  placeholder="0.00"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Términos de Pago (días)
+                </label>
+                <select
+                  value={formData.payment_terms}
+                  onChange={(e) => setFormData({ ...formData, payment_terms: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="0">Contado</option>
+                  <option value="15">15 días</option>
+                  <option value="30">30 días</option>
+                  <option value="45">45 días</option>
+                  <option value="60">60 días</option>
+                </select>
               </div>
 
               <div className="md:col-span-2">
@@ -398,7 +412,7 @@ export default function ConductorsPage() {
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Información adicional sobre el conductor..."
+                  placeholder="Información adicional sobre el cliente..."
                 />
               </div>
 
@@ -407,7 +421,7 @@ export default function ConductorsPage() {
                   type="button"
                   onClick={() => {
                     setShowForm(false)
-                    setEditingConductor(null)
+                    setEditingCustomer(null)
                     resetForm()
                   }}
                   className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
@@ -418,39 +432,39 @@ export default function ConductorsPage() {
                   type="submit"
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  {editingConductor ? 'Actualizar' : 'Crear'} Conductor
+                  {editingCustomer ? 'Actualizar' : 'Crear'} Cliente
                 </button>
               </div>
             </form>
           </div>
         )}
 
-        {/* Lista de conductores */}
+        {/* Lista de clientes */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-bold text-gray-900">
-              Lista de Conductores ({conductors.length})
+              Lista de Clientes ({customers.length})
             </h3>
           </div>
 
-          {conductors.length === 0 ? (
+          {customers.length === 0 ? (
             <div className="p-8 text-center">
-              <div className="text-6xl mb-4">🚛</div>
+              <div className="text-6xl mb-4">👥</div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                No hay conductores registrados
+                No hay clientes registrados
               </h3>
               <p className="text-gray-600 mb-4">
-                Comienza agregando tu primer conductor al equipo
+                Comienza agregando tu primer cliente
               </p>
               <button
                 onClick={() => {
                   setShowForm(true)
-                  setEditingConductor(null)
+                  setEditingCustomer(null)
                   resetForm()
                 }}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
               >
-                ➕ Agregar Primer Conductor
+                ➕ Agregar Primer Cliente
               </button>
             </div>
           ) : (
@@ -459,19 +473,19 @@ export default function ConductorsPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Conductor
+                      Cliente
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Licencia
+                      Contacto
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Vehículo
+                      Ubicación
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Tipo
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Estado
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Entregas
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Acciones
@@ -479,63 +493,63 @@ export default function ConductorsPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {conductors.map((conductor) => (
-                    <tr key={conductor.id} className="hover:bg-gray-50">
+                  {customers.map((customer) => (
+                    <tr key={customer.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
                           <div className="text-sm font-medium text-gray-900">
-                            {conductor.name}
+                            {customer.name}
                           </div>
-                          <div className="text-sm text-gray-500">
-                            {conductor.email}
-                          </div>
-                          {conductor.phone && (
+                          {customer.company && (
                             <div className="text-sm text-gray-500">
-                              📞 {conductor.phone}
+                              🏢 {customer.company}
                             </div>
                           )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {conductor.license_number}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          Tipo {conductor.license_type}
+                        <div>
+                          {customer.email && (
+                            <div className="text-sm text-gray-900">
+                              📧 {customer.email}
+                            </div>
+                          )}
+                          {customer.phone && (
+                            <div className="text-sm text-gray-500">
+                              📞 {customer.phone}
+                            </div>
+                          )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {conductor.vehicle_type || 'No asignado'}
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900 max-w-xs truncate">
+                          📍 {customer.address}
                         </div>
-                        {conductor.vehicle_plate && (
+                        {customer.city && (
                           <div className="text-sm text-gray-500">
-                            🚗 {conductor.vehicle_plate}
+                            {customer.city}
                           </div>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(conductor.status)}`}>
-                          {getStatusText(conductor.status)}
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getCustomerTypeColor(customer.customer_type)}`}>
+                          {getCustomerTypeText(customer.customer_type)}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {conductor.total_deliveries || 0}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          ⭐ {conductor.rating || 5.0}
-                        </div>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(customer.status)}`}>
+                          {customer.status === 'active' ? '✅ Activo' : customer.status}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                         <button
-                          onClick={() => handleEdit(conductor)}
+                          onClick={() => handleEdit(customer)}
                           className="text-blue-600 hover:text-blue-900 transition-colors"
                         >
                           ✏️ Editar
                         </button>
                         <button
-                          onClick={() => handleDelete(conductor.id)}
+                          onClick={() => handleDelete(customer.id)}
                           className="text-red-600 hover:text-red-900 transition-colors"
                         >
                           🗑️ Eliminar

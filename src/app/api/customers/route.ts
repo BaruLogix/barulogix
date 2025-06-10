@@ -12,19 +12,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
-    // Obtener conductores del usuario
-    const { data: conductors, error } = await supabase
-      .from('conductors')
+    // Obtener clientes del usuario
+    const { data: customers, error } = await supabase
+      .from('customers')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('Error fetching conductors:', error)
-      return NextResponse.json({ error: 'Error al obtener conductores' }, { status: 500 })
+      console.error('Error fetching customers:', error)
+      return NextResponse.json({ error: 'Error al obtener clientes' }, { status: 500 })
     }
 
-    return NextResponse.json({ conductors })
+    return NextResponse.json({ customers })
 
   } catch (error) {
     console.error('API Error:', error)
@@ -48,48 +48,44 @@ export async function POST(request: NextRequest) {
       name,
       email,
       phone,
-      license_number,
-      license_type,
-      license_expiry,
-      vehicle_type,
-      vehicle_plate,
-      vehicle_model,
-      vehicle_year,
+      company,
       address,
-      emergency_contact_name,
-      emergency_contact_phone,
-      salary,
-      commission_rate,
+      city,
+      state,
+      postal_code,
+      country,
+      customer_type,
+      credit_limit,
+      payment_terms,
+      tax_id,
       notes
     } = body
 
     // Validaciones básicas
-    if (!name || !email || !license_number) {
+    if (!name || !address) {
       return NextResponse.json({ 
-        error: 'Nombre, email y número de licencia son requeridos' 
+        error: 'Nombre y dirección son requeridos' 
       }, { status: 400 })
     }
 
-    // Crear conductor
-    const { data: conductor, error } = await supabase
-      .from('conductors')
+    // Crear cliente
+    const { data: customer, error } = await supabase
+      .from('customers')
       .insert({
         user_id: user.id,
         name: name.trim(),
-        email: email.trim().toLowerCase(),
+        email: email?.trim().toLowerCase(),
         phone: phone?.trim(),
-        license_number: license_number.trim(),
-        license_type: license_type || 'B',
-        license_expiry,
-        vehicle_type: vehicle_type?.trim(),
-        vehicle_plate: vehicle_plate?.trim().toUpperCase(),
-        vehicle_model: vehicle_model?.trim(),
-        vehicle_year: vehicle_year ? parseInt(vehicle_year) : null,
-        address: address?.trim(),
-        emergency_contact_name: emergency_contact_name?.trim(),
-        emergency_contact_phone: emergency_contact_phone?.trim(),
-        salary: salary ? parseFloat(salary) : null,
-        commission_rate: commission_rate ? parseFloat(commission_rate) : 0.00,
+        company: company?.trim(),
+        address: address.trim(),
+        city: city?.trim(),
+        state: state?.trim(),
+        postal_code: postal_code?.trim(),
+        country: country?.trim() || 'Colombia',
+        customer_type: customer_type || 'regular',
+        credit_limit: credit_limit ? parseFloat(credit_limit) : 0.00,
+        payment_terms: payment_terms ? parseInt(payment_terms) : 30,
+        tax_id: tax_id?.trim(),
         notes: notes?.trim(),
         status: 'active'
       })
@@ -97,23 +93,18 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('Error creating conductor:', error)
+      console.error('Error creating customer:', error)
       
-      if (error.code === '23505') { // Unique constraint violation
-        if (error.message.includes('email')) {
-          return NextResponse.json({ error: 'Ya existe un conductor con este email' }, { status: 409 })
-        }
-        if (error.message.includes('license_number')) {
-          return NextResponse.json({ error: 'Ya existe un conductor con este número de licencia' }, { status: 409 })
-        }
+      if (error.code === '23505' && error.message.includes('email')) {
+        return NextResponse.json({ error: 'Ya existe un cliente con este email' }, { status: 409 })
       }
       
-      return NextResponse.json({ error: 'Error al crear conductor' }, { status: 500 })
+      return NextResponse.json({ error: 'Error al crear cliente' }, { status: 500 })
     }
 
     return NextResponse.json({ 
-      message: 'Conductor creado exitosamente',
-      conductor 
+      message: 'Cliente creado exitosamente',
+      customer 
     }, { status: 201 })
 
   } catch (error) {
@@ -137,33 +128,33 @@ export async function PUT(request: NextRequest) {
     const { id, ...updateData } = body
 
     if (!id) {
-      return NextResponse.json({ error: 'ID del conductor es requerido' }, { status: 400 })
+      return NextResponse.json({ error: 'ID del cliente es requerido' }, { status: 400 })
     }
 
-    // Actualizar conductor
-    const { data: conductor, error } = await supabase
-      .from('conductors')
+    // Actualizar cliente
+    const { data: customer, error } = await supabase
+      .from('customers')
       .update({
         ...updateData,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
-      .eq('user_id', user.id) // Asegurar que solo actualice sus propios conductores
+      .eq('user_id', user.id)
       .select()
       .single()
 
     if (error) {
-      console.error('Error updating conductor:', error)
-      return NextResponse.json({ error: 'Error al actualizar conductor' }, { status: 500 })
+      console.error('Error updating customer:', error)
+      return NextResponse.json({ error: 'Error al actualizar cliente' }, { status: 500 })
     }
 
-    if (!conductor) {
-      return NextResponse.json({ error: 'Conductor no encontrado' }, { status: 404 })
+    if (!customer) {
+      return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
     }
 
     return NextResponse.json({ 
-      message: 'Conductor actualizado exitosamente',
-      conductor 
+      message: 'Cliente actualizado exitosamente',
+      customer 
     })
 
   } catch (error) {
@@ -187,14 +178,14 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get('id')
 
     if (!id) {
-      return NextResponse.json({ error: 'ID del conductor es requerido' }, { status: 400 })
+      return NextResponse.json({ error: 'ID del cliente es requerido' }, { status: 400 })
     }
 
-    // Verificar si el conductor tiene entregas asignadas
+    // Verificar si el cliente tiene entregas
     const { data: deliveries, error: deliveriesError } = await supabase
       .from('deliveries')
       .select('id')
-      .eq('conductor_id', id)
+      .eq('customer_id', id)
       .limit(1)
 
     if (deliveriesError) {
@@ -203,9 +194,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (deliveries && deliveries.length > 0) {
-      // En lugar de eliminar, desactivar el conductor
-      const { data: conductor, error } = await supabase
-        .from('conductors')
+      // En lugar de eliminar, desactivar el cliente
+      const { data: customer, error } = await supabase
+        .from('customers')
         .update({ 
           status: 'inactive',
           updated_at: new Date().toISOString()
@@ -216,29 +207,29 @@ export async function DELETE(request: NextRequest) {
         .single()
 
       if (error) {
-        console.error('Error deactivating conductor:', error)
-        return NextResponse.json({ error: 'Error al desactivar conductor' }, { status: 500 })
+        console.error('Error deactivating customer:', error)
+        return NextResponse.json({ error: 'Error al desactivar cliente' }, { status: 500 })
       }
 
       return NextResponse.json({ 
-        message: 'Conductor desactivado (tiene entregas asignadas)',
-        conductor 
+        message: 'Cliente desactivado (tiene entregas asociadas)',
+        customer 
       })
     }
 
-    // Eliminar conductor si no tiene entregas
+    // Eliminar cliente si no tiene entregas
     const { error } = await supabase
-      .from('conductors')
+      .from('customers')
       .delete()
       .eq('id', id)
       .eq('user_id', user.id)
 
     if (error) {
-      console.error('Error deleting conductor:', error)
-      return NextResponse.json({ error: 'Error al eliminar conductor' }, { status: 500 })
+      console.error('Error deleting customer:', error)
+      return NextResponse.json({ error: 'Error al eliminar cliente' }, { status: 500 })
     }
 
-    return NextResponse.json({ message: 'Conductor eliminado exitosamente' })
+    return NextResponse.json({ message: 'Cliente eliminado exitosamente' })
 
   } catch (error) {
     console.error('API Error:', error)

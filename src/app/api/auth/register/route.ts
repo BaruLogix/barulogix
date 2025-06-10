@@ -60,14 +60,15 @@ export async function POST(request: NextRequest) {
 
     console.log('Creating user in Supabase Auth...')
 
-    // Crear usuario en Supabase Auth
+    // Crear usuario en Supabase Auth con confirmación automática
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: email.trim().toLowerCase(),
       password: password,
       options: {
         data: {
           name: name.trim()
-        }
+        },
+        emailRedirectTo: `${process.env.NEXTAUTH_URL || 'https://barulogix.vercel.app'}/auth/login`
       }
     })
 
@@ -92,6 +93,23 @@ export async function POST(request: NextRequest) {
 
     console.log('User created in auth.users:', authData.user.id)
 
+    // CONFIRMAR AUTOMÁTICAMENTE EL EMAIL DEL USUARIO
+    console.log('Auto-confirming user email...')
+    try {
+      const { error: confirmError } = await supabase.auth.admin.updateUserById(
+        authData.user.id,
+        { email_confirm: true }
+      )
+      
+      if (confirmError) {
+        console.log('Email confirmation error:', confirmError)
+      } else {
+        console.log('Email confirmed automatically')
+      }
+    } catch (confirmErr) {
+      console.log('Error confirming email:', confirmErr)
+    }
+
     // Esperar un momento para que el trigger tenga tiempo de ejecutarse
     console.log('Waiting for trigger to execute...')
     await new Promise(resolve => setTimeout(resolve, 2000))
@@ -108,7 +126,7 @@ export async function POST(request: NextRequest) {
       console.log('SUCCESS: Profile created automatically by trigger')
       return NextResponse.json({
         success: true,
-        message: 'Usuario creado exitosamente',
+        message: 'Usuario creado exitosamente. ¡Ya puedes iniciar sesión!',
         user: {
           id: autoProfile.id,
           email: autoProfile.email,
@@ -116,7 +134,8 @@ export async function POST(request: NextRequest) {
           role: autoProfile.role,
           isActive: autoProfile.is_active,
           subscription: autoProfile.subscription
-        }
+        },
+        emailVerificationNote: 'Tu email ha sido verificado automáticamente. Si recibiste un email de confirmación, puedes ignorarlo.'
       })
     }
 
@@ -150,7 +169,7 @@ export async function POST(request: NextRequest) {
         console.log('Profile found on retry')
         return NextResponse.json({
           success: true,
-          message: 'Usuario creado exitosamente',
+          message: 'Usuario creado exitosamente. ¡Ya puedes iniciar sesión!',
           user: {
             id: existingProfileRetry.id,
             email: existingProfileRetry.email,
@@ -158,7 +177,8 @@ export async function POST(request: NextRequest) {
             role: existingProfileRetry.role,
             isActive: existingProfileRetry.is_active,
             subscription: existingProfileRetry.subscription
-          }
+          },
+          emailVerificationNote: 'Tu email ha sido verificado automáticamente.'
         })
       }
 
@@ -172,7 +192,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: false,
-        error: 'Error al crear perfil de usuario',
+        error: 'Error al crear perfil de usuario. Por favor, intenta nuevamente.',
         debug: {
           profileError: manualProfileError.message
         }
@@ -183,7 +203,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Usuario creado exitosamente',
+      message: 'Usuario creado exitosamente. ¡Ya puedes iniciar sesión!',
       user: {
         id: manualProfile.id,
         email: manualProfile.email,
@@ -191,7 +211,8 @@ export async function POST(request: NextRequest) {
         role: manualProfile.role,
         isActive: manualProfile.is_active,
         subscription: manualProfile.subscription
-      }
+      },
+      emailVerificationNote: 'Tu email ha sido verificado automáticamente. Si recibiste un email de confirmación, puedes ignorarlo.'
     })
 
   } catch (error: any) {
@@ -201,7 +222,7 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({
       success: false,
-      error: 'Error interno del servidor',
+      error: 'Error interno del servidor. Por favor, intenta nuevamente.',
       debug: {
         message: error.message,
         stack: error.stack

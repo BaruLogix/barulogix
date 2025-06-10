@@ -12,7 +12,6 @@ export async function POST(request: NextRequest) {
 
     // Validar datos de entrada
     if (!email || !password) {
-      console.log('ERROR: Missing email or password')
       return NextResponse.json({
         success: false,
         error: 'Email y contraseña son requeridos'
@@ -22,59 +21,124 @@ export async function POST(request: NextRequest) {
     // Crear cliente de Supabase
     const supabase = createClient()
 
-    console.log('Attempting Supabase auth...')
+    // Verificar si el usuario existe en auth.users ANTES de intentar login
+    console.log('Checking if user exists in auth.users...')
+    const { data: users, error: listError } = await supabase.auth.admin.listUsers()
+    
+    let userExists = false
+    let userConfirmed = false
+    
+    if (!listError && users) {
+      const foundUser = users.users.find(u => u.email === email.trim().toLowerCase())
+      if (foundUser) {
+        userExists = true
+        userConfirmed = !!foundUser.email_confirmed_at
+        console.log('User found:', foundUser.id)
+        console.log('User confirmed:', userConfirmed)
+      }
+    }
 
     // Intentar autenticación
+    console.log('Attempting authentication...')
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
       password: password
     })
 
+    // Manejar errores específicos de autenticación
     if (authError) {
-      console.log('AUTH ERROR:', authError)
-      console.log('Auth error code:', authError.status)
-      console.log('Auth error message:', authError.message)
-      
+      console.log('AUTH ERROR:', authError.message)
+      console.log('AUTH ERROR CODE:', authError.status)
+
+      // Error específico: Email no confirmado
+      if (authError.message.includes('email_not_confirmed') || 
+          authError.message.includes('Email not confirmed') ||
+          (userExists && !userConfirmed)) {
+        
+        console.log('ERROR: Email not confirmed')
+        return NextResponse.json({
+          success: false,
+          error: 'email_not_verified',
+          message: 'Tu email aún no está verificado',
+          friendlyMessage: 'Para poder iniciar sesión, necesitas verificar tu email. Por favor, revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace de verificación que te enviamos.',
+          actions: {
+            resendVerification: true,
+            checkSpam: true,
+            contactSupport: true
+          },
+          userEmail: email.trim().toLowerCase()
+        }, { status: 401 })
+      }
+
+      // Error específico: Credenciales incorrectas
+      if (authError.message.includes('Invalid login credentials') ||
+          authError.message.includes('invalid_credentials')) {
+        
+        if (!userExists) {
+          return NextResponse.json({
+            success: false,
+            error: 'user_not_found',
+            message: 'No existe una cuenta con este email',
+            friendlyMessage: 'No encontramos una cuenta registrada con este email. ¿Quizás necesitas crear una cuenta nueva?',
+            actions: {
+              register: true,
+              checkEmail: true
+            }
+          }, { status: 401 })
+        } else {
+          return NextResponse.json({
+            success: false,
+            error: 'invalid_password',
+            message: 'Contraseña incorrecta',
+            friendlyMessage: 'La contraseña que ingresaste no es correcta. Por favor, verifica que esté bien escrita.',
+            actions: {
+              resetPassword: true,
+              tryAgain: true
+            }
+          }, { status: 401 })
+        }
+      }
+
+      // Otros errores de autenticación
       return NextResponse.json({
         success: false,
-        error: 'Credenciales inválidas',
+        error: 'auth_error',
+        message: 'Error de autenticación',
+        friendlyMessage: 'Hubo un problema al iniciar sesión. Por favor, intenta nuevamente en unos momentos.',
         debug: {
           authError: authError.message,
-          code: authError.status
+          authStatus: authError.status
         }
       }, { status: 401 })
     }
 
     if (!authData.user) {
-      console.log('ERROR: No user returned from auth')
       return NextResponse.json({
         success: false,
-        error: 'No se pudo autenticar el usuario'
+        error: 'no_user_returned',
+        message: 'No se pudo autenticar el usuario'
       }, { status: 401 })
     }
 
-    console.log('AUTH SUCCESS - User ID:', authData.user.id)
-    console.log('User email from auth:', authData.user.email)
+    console.log('Authentication successful:', authData.user.id)
 
-    // Obtener perfil del usuario
-    console.log('Fetching user profile...')
+    // Verificar si el usuario tiene perfil
+    console.log('Checking user profile...')
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
       .select('*')
       .eq('id', authData.user.id)
       .single()
 
-    if (profileError) {
-      console.log('PROFILE ERROR:', profileError)
+    if (profileError || !profile) {
+      console.log('Profile not found, creating...')
       
-      // Si no existe perfil, crearlo automáticamente
-      console.log('Creating missing profile for user:', authData.user.id)
-      
-      const { data: newProfile, error: createError } = await supabase
+      // Crear perfil si no existe
+      const { data: newProfile, error: createProfileError } = await supabase
         .from('user_profiles')
         .insert({
           id: authData.user.id,
-          email: authData.user.email || email,
+          email: authData.user.email,
           name: authData.user.user_metadata?.name || 'Usuario',
           role: 'user',
           subscription: 'basic',
@@ -83,86 +147,52 @@ export async function POST(request: NextRequest) {
         .select()
         .single()
 
-      if (createError) {
-        console.log('CREATE PROFILE ERROR:', createError)
-        
-        // Intentar obtener el perfil una vez más por si se creó entre tanto
-        const { data: retryProfile } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', authData.user.id)
-          .single()
-
-        if (retryProfile) {
-          console.log('Profile found on retry:', retryProfile.id)
-          return NextResponse.json({
-            success: true,
-            user: {
-              id: retryProfile.id,
-              email: retryProfile.email,
-              name: retryProfile.name,
-              role: retryProfile.role,
-              isActive: retryProfile.is_active,
-              subscription: retryProfile.subscription,
-              company: retryProfile.company,
-              phone: retryProfile.phone
-            }
-          })
-        }
-
+      if (createProfileError) {
+        console.log('Error creating profile:', createProfileError)
         return NextResponse.json({
           success: false,
-          error: 'Error al crear perfil de usuario',
-          debug: {
-            createError: createError.message
-          }
+          error: 'profile_creation_error',
+          message: 'Error al crear perfil de usuario'
         }, { status: 500 })
       }
 
-      console.log('Profile created successfully:', newProfile.id)
-
+      console.log('Profile created successfully')
       return NextResponse.json({
         success: true,
+        message: 'Login exitoso',
         user: {
           id: newProfile.id,
           email: newProfile.email,
           name: newProfile.name,
           role: newProfile.role,
           isActive: newProfile.is_active,
-          subscription: newProfile.subscription,
-          company: newProfile.company,
-          phone: newProfile.phone
+          subscription: newProfile.subscription
         }
       })
     }
 
-    console.log('Profile found:', profile.id)
-    console.log('Profile active:', profile.is_active)
-
-    // Verificar que el usuario esté activo
+    // Verificar si el usuario está activo
     if (!profile.is_active) {
-      console.log('User is inactive:', profile.id)
       return NextResponse.json({
         success: false,
-        error: 'Usuario desactivado'
+        error: 'user_inactive',
+        message: 'Tu cuenta está desactivada',
+        friendlyMessage: 'Tu cuenta ha sido desactivada. Por favor, contacta al administrador para más información.'
       }, { status: 403 })
     }
 
-    console.log('=== LOGIN SUCCESS ===')
-    console.log('User ID:', profile.id)
-    console.log('User role:', profile.role)
+    console.log('Login successful for user:', profile.id)
 
     return NextResponse.json({
       success: true,
+      message: 'Login exitoso',
       user: {
         id: profile.id,
         email: profile.email,
         name: profile.name,
         role: profile.role,
         isActive: profile.is_active,
-        subscription: profile.subscription,
-        company: profile.company,
-        phone: profile.phone
+        subscription: profile.subscription
       }
     })
 
@@ -173,10 +203,11 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({
       success: false,
-      error: 'Error interno del servidor',
+      error: 'server_error',
+      message: 'Error interno del servidor',
+      friendlyMessage: 'Hubo un problema técnico. Por favor, intenta nuevamente en unos momentos.',
       debug: {
-        message: error.message,
-        stack: error.stack
+        message: error.message
       }
     }, { status: 500 })
   }
