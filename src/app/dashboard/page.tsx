@@ -3,11 +3,24 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { User } from '@/lib/supabase'
+
+interface User {
+  id: string
+  email: string
+  name: string
+  role: 'admin' | 'user'
+  isActive: boolean
+  subscription: 'basic' | 'premium' | 'enterprise'
+  company?: string
+  phone?: string
+  createdAt: string
+  updatedAt: string
+}
 
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [stats, setStats] = useState({
     totalDeliveries: 0,
     pendingDeliveries: 0,
@@ -17,96 +30,177 @@ export default function DashboardPage() {
   const router = useRouter()
 
   useEffect(() => {
-    checkUser()
-    loadStats()
+    initializeDashboard()
   }, [])
 
-  const checkUser = async () => {
+  const initializeDashboard = async () => {
     try {
+      setLoading(true)
+      setError(null)
+      
       const supabase = createClient()
-      const { data: { user: authUser } } = await supabase.auth.getUser()
+      
+      // Verificar autenticación
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
 
-      if (!authUser) {
+      if (authError) {
+        console.error('Auth error:', authError)
         router.push('/auth/login')
         return
       }
 
-      // Obtener perfil completo
-      const { data: profile } = await supabase
+      if (!authUser) {
+        console.log('No authenticated user found')
+        router.push('/auth/login')
+        return
+      }
+
+      console.log('Authenticated user:', authUser.email)
+
+      // Obtener perfil del usuario
+      const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', authUser.id)
         .single()
 
-      if (profile) {
-        setUser({
-          id: profile.id,
-          email: profile.email,
-          name: profile.name,
-          role: profile.role,
-          isActive: profile.is_active,
-          subscription: profile.subscription,
-          company: profile.company,
-          phone: profile.phone,
-          createdAt: profile.created_at,
-          updatedAt: profile.updated_at
-        })
+      if (profileError) {
+        console.error('Profile error:', profileError)
+        setError('Error al cargar perfil de usuario')
+        return
       }
+
+      if (!profile) {
+        console.error('No profile found for user')
+        setError('Perfil de usuario no encontrado')
+        return
+      }
+
+      console.log('User profile loaded:', profile)
+
+      // Configurar usuario
+      setUser({
+        id: profile.id,
+        email: profile.email,
+        name: profile.name,
+        role: profile.role,
+        isActive: profile.is_active,
+        subscription: profile.subscription,
+        company: profile.company,
+        phone: profile.phone,
+        createdAt: profile.created_at,
+        updatedAt: profile.updated_at
+      })
+
+      // Cargar estadísticas
+      await loadStats(authUser.id, supabase)
+
     } catch (error) {
-      console.error('Error checking user:', error)
-      router.push('/auth/login')
+      console.error('Dashboard initialization error:', error)
+      setError('Error al inicializar dashboard')
     } finally {
       setLoading(false)
     }
   }
 
-  const loadStats = async () => {
+  const loadStats = async (userId: string, supabase: any) => {
     try {
-      const supabase = createClient()
-      const { data: { user: authUser } } = await supabase.auth.getUser()
+      console.log('Loading stats for user:', userId)
 
-      if (!authUser) return
-
-      // Obtener estadísticas
-      const { data: deliveries } = await supabase
+      // Obtener entregas
+      const { data: deliveries, error: deliveriesError } = await supabase
         .from('deliveries')
         .select('status')
-        .eq('user_id', authUser.id)
+        .eq('user_id', userId)
 
-      const { data: conductors } = await supabase
+      if (deliveriesError) {
+        console.error('Deliveries error:', deliveriesError)
+      }
+
+      // Obtener conductores
+      const { data: conductors, error: conductorsError } = await supabase
         .from('conductors')
         .select('is_active')
-        .eq('user_id', authUser.id)
+        .eq('user_id', userId)
 
-      if (deliveries) {
-        setStats({
-          totalDeliveries: deliveries.length,
-          pendingDeliveries: deliveries.filter(d => d.status === 'pending').length,
-          completedDeliveries: deliveries.filter(d => d.status === 'delivered').length,
-          activeConductors: conductors?.filter(c => c.is_active).length || 0
-        })
+      if (conductorsError) {
+        console.error('Conductors error:', conductorsError)
       }
+
+      // Calcular estadísticas
+      const totalDeliveries = deliveries?.length || 0
+      const pendingDeliveries = deliveries?.filter(d => d.status === 'pending').length || 0
+      const completedDeliveries = deliveries?.filter(d => d.status === 'delivered').length || 0
+      const activeConductors = conductors?.filter(c => c.is_active).length || 0
+
+      setStats({
+        totalDeliveries,
+        pendingDeliveries,
+        completedDeliveries,
+        activeConductors
+      })
+
+      console.log('Stats loaded:', { totalDeliveries, pendingDeliveries, completedDeliveries, activeConductors })
+
     } catch (error) {
       console.error('Error loading stats:', error)
     }
   }
 
   const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/auth/login')
+    try {
+      const supabase = createClient()
+      await supabase.auth.signOut()
+      router.push('/auth/login')
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
   }
 
+  // Estado de carga
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Cargando...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="text-lg text-gray-600">Cargando dashboard...</div>
+        </div>
       </div>
     )
   }
 
+  // Estado de error
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="text-red-600 text-lg mb-4">❌ {error}</div>
+          <button
+            onClick={initializeDashboard}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+          >
+            Reintentar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Si no hay usuario después de cargar
   if (!user) {
-    return null
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="text-gray-600 text-lg mb-4">No se pudo cargar el usuario</div>
+          <button
+            onClick={() => router.push('/auth/login')}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+          >
+            Ir a Login
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -290,6 +384,20 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+
+          {/* Debug Info (solo para admin) */}
+          {user.role === 'admin' && (
+            <div className="mt-8 bg-gray-100 p-4 rounded-lg">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">🔧 Información de Debug</h3>
+              <div className="text-xs text-gray-600">
+                <p>Usuario ID: {user.id}</p>
+                <p>Email: {user.email}</p>
+                <p>Rol: {user.role}</p>
+                <p>Suscripción: {user.subscription}</p>
+                <p>Estado: {user.isActive ? 'Activo' : 'Inactivo'}</p>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
