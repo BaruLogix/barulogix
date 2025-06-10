@@ -1,337 +1,298 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Image from 'next/image';
-import { 
-  Truck, 
-  Package, 
-  Users, 
-  BarChart3, 
-  Plus, 
-  Search, 
-  Filter,
-  LogOut,
-  Settings,
-  Bell,
-  Calendar,
-  TrendingUp,
-  AlertTriangle
-} from 'lucide-react';
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  company?: string;
-}
-
-interface DashboardStats {
-  totalDeliveries: number;
-  pendingDeliveries: number;
-  completedDeliveries: number;
-  returnedDeliveries: number;
-  activeConductors: number;
-  todayDeliveries: number;
-}
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase'
+import { User } from '@/lib/supabase'
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<User | null>(null);
-  const [stats, setStats] = useState<DashboardStats>({
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
     totalDeliveries: 0,
     pendingDeliveries: 0,
     completedDeliveries: 0,
-    returnedDeliveries: 0,
-    activeConductors: 0,
-    todayDeliveries: 0
-  });
-  const [loading, setLoading] = useState(true);
-  const router = useRouter();
+    activeConductors: 0
+  })
+  const router = useRouter()
 
   useEffect(() => {
-    // Verificar autenticación
-    const token = localStorage.getItem('token');
-    const userData = localStorage.getItem('user');
-    
-    if (!token || !userData) {
-      router.push('/auth/login');
-      return;
-    }
+    checkUser()
+    loadStats()
+  }, [])
 
+  const checkUser = async () => {
     try {
-      const parsedUser = JSON.parse(userData);
-      setUser(parsedUser);
-      
-      // Simular carga de estadísticas (en producción vendría de la API)
-      setTimeout(() => {
-        setStats({
-          totalDeliveries: 1247,
-          pendingDeliveries: 89,
-          completedDeliveries: 1098,
-          returnedDeliveries: 60,
-          activeConductors: 12,
-          todayDeliveries: 23
-        });
-        setLoading(false);
-      }, 1000);
-    } catch (error) {
-      router.push('/auth/login');
-    }
-  }, [router]);
+      const supabase = createClient()
+      const { data: { user: authUser } } = await supabase.auth.getUser()
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    router.push('/');
-  };
+      if (!authUser) {
+        router.push('/auth/login')
+        return
+      }
+
+      // Obtener perfil completo
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single()
+
+      if (profile) {
+        setUser({
+          id: profile.id,
+          email: profile.email,
+          name: profile.name,
+          role: profile.role,
+          isActive: profile.is_active,
+          subscription: profile.subscription,
+          company: profile.company,
+          phone: profile.phone,
+          createdAt: profile.created_at,
+          updatedAt: profile.updated_at
+        })
+      }
+    } catch (error) {
+      console.error('Error checking user:', error)
+      router.push('/auth/login')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadStats = async () => {
+    try {
+      const supabase = createClient()
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+
+      if (!authUser) return
+
+      // Obtener estadísticas
+      const { data: deliveries } = await supabase
+        .from('deliveries')
+        .select('status')
+        .eq('user_id', authUser.id)
+
+      const { data: conductors } = await supabase
+        .from('conductors')
+        .select('is_active')
+        .eq('user_id', authUser.id)
+
+      if (deliveries) {
+        setStats({
+          totalDeliveries: deliveries.length,
+          pendingDeliveries: deliveries.filter(d => d.status === 'pending').length,
+          completedDeliveries: deliveries.filter(d => d.status === 'delivered').length,
+          activeConductors: conductors?.filter(c => c.is_active).length || 0
+        })
+      }
+    } catch (error) {
+      console.error('Error loading stats:', error)
+    }
+  }
+
+  const handleLogout = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/auth/login')
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando dashboard...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg">Cargando...</div>
       </div>
-    );
+    )
+  }
+
+  if (!user) {
+    return null
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-3">
-              <Image 
-                src="/logo.png" 
-                alt="BaruLogix Logo" 
-                width={40} 
-                height={40}
-                className="rounded-full"
-              />
-              <h1 className="text-2xl font-bold text-gray-900">BaruLogix</h1>
+          <div className="flex justify-between items-center py-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">BaruLogix</h1>
+              <p className="text-sm text-gray-600">Dashboard de {user.name}</p>
             </div>
-            
             <div className="flex items-center space-x-4">
-              <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
-                <Bell className="h-5 w-5" />
+              <span className="text-sm text-gray-700">
+                {user.role === 'admin' ? '👑 Administrador' : '👤 Usuario'}
+              </span>
+              <button
+                onClick={handleLogout}
+                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+              >
+                Cerrar Sesión
               </button>
-              <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
-                <Settings className="h-5 w-5" />
-              </button>
-              <div className="flex items-center space-x-3">
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-                  <p className="text-xs text-gray-500">{user?.company || 'Usuario'}</p>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="p-2 text-gray-400 hover:text-red-600 transition-colors"
-                  title="Cerrar sesión"
-                >
-                  <LogOut className="h-5 w-5" />
-                </button>
-              </div>
             </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">
-            Bienvenido, {user?.name}
-          </h2>
-          <p className="text-gray-600">
-            Aquí tienes un resumen de tu operación logística
-          </p>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {/* Total Deliveries */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Entregas</p>
-                <p className="text-3xl font-bold text-gray-900">{stats.totalDeliveries.toLocaleString()}</p>
-              </div>
-              <div className="bg-blue-100 rounded-lg p-3">
-                <Package className="h-6 w-6 text-blue-600" />
-              </div>
-            </div>
-            <div className="mt-4 flex items-center">
-              <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-              <span className="text-sm text-green-600">+12% vs mes anterior</span>
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0">
+          {/* Welcome Message */}
+          <div className="bg-white overflow-hidden shadow rounded-lg mb-6">
+            <div className="px-4 py-5 sm:p-6">
+              <h2 className="text-lg font-medium text-gray-900 mb-2">
+                ¡Bienvenido a BaruLogix! 🚀
+              </h2>
+              <p className="text-gray-600">
+                Tu plataforma de gestión de entregas está funcionando perfectamente con Supabase.
+              </p>
+              {user.role === 'admin' && (
+                <div className="mt-4 p-4 bg-blue-50 rounded-md">
+                  <p className="text-blue-800 font-medium">
+                    🎉 ¡Migración completada exitosamente!
+                  </p>
+                  <p className="text-blue-700 text-sm mt-1">
+                    Tienes acceso completo como administrador. Puedes gestionar usuarios, conductores y entregas.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Pending Deliveries */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Pendientes</p>
-                <p className="text-3xl font-bold text-orange-600">{stats.pendingDeliveries}</p>
-              </div>
-              <div className="bg-orange-100 rounded-lg p-3">
-                <AlertTriangle className="h-6 w-6 text-orange-600" />
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
+                      <span className="text-white text-sm font-bold">📦</span>
+                    </div>
+                  </div>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">
+                        Total Entregas
+                      </dt>
+                      <dd className="text-lg font-medium text-gray-900">
+                        {stats.totalDeliveries}
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="mt-4">
-              <span className="text-sm text-gray-500">Requieren atención</span>
-            </div>
-          </div>
 
-          {/* Completed Deliveries */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Completadas</p>
-                <p className="text-3xl font-bold text-green-600">{stats.completedDeliveries.toLocaleString()}</p>
-              </div>
-              <div className="bg-green-100 rounded-lg p-3">
-                <Package className="h-6 w-6 text-green-600" />
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-yellow-500 rounded-md flex items-center justify-center">
+                      <span className="text-white text-sm font-bold">⏳</span>
+                    </div>
+                  </div>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">
+                        Pendientes
+                      </dt>
+                      <dd className="text-lg font-medium text-gray-900">
+                        {stats.pendingDeliveries}
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="mt-4">
-              <span className="text-sm text-gray-500">
-                {((stats.completedDeliveries / stats.totalDeliveries) * 100).toFixed(1)}% del total
-              </span>
-            </div>
-          </div>
 
-          {/* Active Conductors */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Conductores</p>
-                <p className="text-3xl font-bold text-purple-600">{stats.activeConductors}</p>
-              </div>
-              <div className="bg-purple-100 rounded-lg p-3">
-                <Users className="h-6 w-6 text-purple-600" />
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
+                      <span className="text-white text-sm font-bold">✅</span>
+                    </div>
+                  </div>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">
+                        Completadas
+                      </dt>
+                      <dd className="text-lg font-medium text-gray-900">
+                        {stats.completedDeliveries}
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="mt-4">
-              <span className="text-sm text-gray-500">Activos hoy</span>
-            </div>
-          </div>
-        </div>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Quick Actions Card */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Acciones Rápidas</h3>
-            <div className="space-y-3">
-              <button 
-                onClick={() => router.push('/deliveries')}
-                className="flex items-center px-4 py-2 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-              >
+            <div className="bg-white overflow-hidden shadow rounded-lg">
+              <div className="p-5">
                 <div className="flex items-center">
-                  <Plus className="h-5 w-5 text-blue-600 mr-3" />
-                  <span className="text-blue-700 font-medium">Registrar Entregas</span>
-                </div>
-              </button>
-              <button 
-                onClick={() => router.push('/conductors')}
-                className="flex items-center px-4 py-2 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
-              >
-                <div className="flex items-center">
-                  <Users className="h-5 w-5 text-green-600 mr-3" />
-                  <span className="text-green-700 font-medium">Gestionar Conductores</span>
-                </div>
-              </button>
-              <button 
-                onClick={() => router.push('/reports')}
-                className="flex items-center px-4 py-2 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
-              >
-                <div className="flex items-center">
-                  <BarChart3 className="h-5 w-5 text-purple-600 mr-3" />
-                  <span className="text-purple-700 font-medium">Ver Reportes</span>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 lg:col-span-2">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Actividad Reciente</h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center">
-                  <div className="bg-green-100 rounded-full p-2 mr-3">
-                    <Package className="h-4 w-4 text-green-600" />
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
+                      <span className="text-white text-sm font-bold">🏍️</span>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">15 entregas completadas</p>
-                    <p className="text-xs text-gray-500">Conductor: Juan Pérez - Hace 2 horas</p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center">
-                  <div className="bg-blue-100 rounded-full p-2 mr-3">
-                    <Plus className="h-4 w-4 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">32 paquetes Shein registrados</p>
-                    <p className="text-xs text-gray-500">Hace 4 horas</p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center">
-                  <div className="bg-orange-100 rounded-full p-2 mr-3">
-                    <AlertTriangle className="h-4 w-4 text-orange-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">3 paquetes devueltos</p>
-                    <p className="text-xs text-gray-500">Conductor: María García - Hace 6 horas</p>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">
+                        Conductores
+                      </dt>
+                      <dd className="text-lg font-medium text-gray-900">
+                        {stats.activeConductors}
+                      </dd>
+                    </dl>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Today's Summary */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Resumen de Hoy</h3>
-            <div className="flex items-center text-sm text-gray-500">
-              <Calendar className="h-4 w-4 mr-1" />
-              {new Date().toLocaleDateString('es-CO', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
-              })}
+          {/* Navigation Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="bg-white overflow-hidden shadow rounded-lg hover:shadow-lg transition-shadow cursor-pointer">
+              <div className="p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">📋 Gestionar Entregas</h3>
+                <p className="text-gray-600 text-sm">
+                  Crear, editar y hacer seguimiento de entregas
+                </p>
+              </div>
             </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-blue-600">{stats.todayDeliveries}</p>
-              <p className="text-sm text-gray-600">Entregas programadas</p>
+
+            <div className="bg-white overflow-hidden shadow rounded-lg hover:shadow-lg transition-shadow cursor-pointer">
+              <div className="p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">🏍️ Gestionar Conductores</h3>
+                <p className="text-gray-600 text-sm">
+                  Administrar conductores y asignaciones
+                </p>
+              </div>
             </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-green-600">18</p>
-              <p className="text-sm text-gray-600">Completadas</p>
+
+            <div className="bg-white overflow-hidden shadow rounded-lg hover:shadow-lg transition-shadow cursor-pointer">
+              <div className="p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">📊 Reportes</h3>
+                <p className="text-gray-600 text-sm">
+                  Ver estadísticas y generar reportes
+                </p>
+              </div>
             </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-orange-600">5</p>
-              <p className="text-sm text-gray-600">Pendientes</p>
-            </div>
+
+            {user.role === 'admin' && (
+              <div className="bg-white overflow-hidden shadow rounded-lg hover:shadow-lg transition-shadow cursor-pointer border-2 border-blue-200">
+                <div className="p-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">👑 Panel Admin</h3>
+                  <p className="text-gray-600 text-sm">
+                    Gestionar usuarios y configuración del sistema
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </main>
     </div>
-  );
+  )
 }
 

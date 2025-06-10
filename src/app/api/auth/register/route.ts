@@ -1,98 +1,91 @@
-// API Route para registro de usuarios
-import { NextRequest, NextResponse } from 'next/server';
-import connectDB from '@/lib/mongodb';
-import { User } from '@/lib/models';
-import { hashPassword, isValidEmail, isValidPassword, sanitizeString, createSuccessResponse, createErrorResponse } from '@/lib/utils';
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase-server'
 
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
-    
-    const { email, password, name, company } = await request.json();
-    
-    // Validaciones básicas
-    if (!email || !password || !name) {
+    const { name, email, password, confirmPassword } = await request.json()
+
+    // Validaciones
+    if (!name || !email || !password || !confirmPassword) {
       return NextResponse.json(
-        createErrorResponse('Email, contraseña y nombre son requeridos'),
+        { success: false, error: 'Todos los campos son requeridos' },
         { status: 400 }
-      );
+      )
     }
-    
-    if (!isValidEmail(email)) {
+
+    if (password !== confirmPassword) {
       return NextResponse.json(
-        createErrorResponse('Email inválido'),
+        { success: false, error: 'Las contraseñas no coinciden' },
         { status: 400 }
-      );
+      )
     }
-    
-    if (!isValidPassword(password)) {
+
+    if (password.length < 6) {
       return NextResponse.json(
-        createErrorResponse('La contraseña debe tener al menos 6 caracteres, incluyendo letras y números'),
+        { success: false, error: 'La contraseña debe tener al menos 6 caracteres' },
         { status: 400 }
-      );
+      )
     }
-    
-    if (name.trim().length < 2) {
+
+    // Validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
       return NextResponse.json(
-        createErrorResponse('El nombre debe tener al menos 2 caracteres'),
+        { success: false, error: 'Formato de email inválido' },
         { status: 400 }
-      );
+      )
     }
-    
-    // Verificar si el usuario ya existe
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
-    if (existingUser) {
+
+    const supabase = createClient()
+
+    // Registrar usuario en Supabase Auth
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name: name
+        }
+      }
+    })
+
+    if (error) {
+      if (error.message.includes('already registered')) {
+        return NextResponse.json(
+          { success: false, error: 'Este email ya está registrado' },
+          { status: 409 }
+        )
+      }
+      
       return NextResponse.json(
-        createErrorResponse('Ya existe un usuario con este email'),
-        { status: 409 }
-      );
+        { success: false, error: error.message },
+        { status: 400 }
+      )
     }
-    
-    // Hashear contraseña
-    const hashedPassword = await hashPassword(password);
-    
-    // Crear usuario
-    const newUser = new User({
-      email: email.toLowerCase(),
-      password: hashedPassword,
-      name: sanitizeString(name),
-      company: company ? sanitizeString(company) : undefined,
-      role: 'user', // Por defecto todos son usuarios normales
-      subscriptionStatus: 'pending' // Requiere pago para activar
-    });
-    
-    await newUser.save();
-    
-    // Respuesta exitosa (sin incluir la contraseña)
-    const userData = {
-      id: newUser._id,
-      email: newUser.email,
-      name: newUser.name,
-      company: newUser.company,
-      role: newUser.role,
-      subscriptionStatus: newUser.subscriptionStatus
-    };
-    
-    return NextResponse.json(
-      createSuccessResponse(userData, 'Usuario registrado exitosamente. Procede con el pago para activar tu cuenta.'),
-      { status: 201 }
-    );
-    
+
+    if (!data.user) {
+      return NextResponse.json(
+        { success: false, error: 'Error al crear usuario' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Usuario registrado exitosamente',
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        name: name
+      }
+    })
+
   } catch (error) {
-    console.error('Error en registro:', error);
-    
-    // Manejar errores de duplicación de MongoDB
-    if ((error as any).code === 11000) {
-      return NextResponse.json(
-        createErrorResponse('Ya existe un usuario con este email'),
-        { status: 409 }
-      );
-    }
-    
+    console.error('Error en registro:', error)
     return NextResponse.json(
-      createErrorResponse('Error interno del servidor'),
+      { success: false, error: 'Error interno del servidor' },
       { status: 500 }
-    );
+    )
   }
 }
 

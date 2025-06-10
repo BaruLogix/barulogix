@@ -1,87 +1,95 @@
-// API Route para crear usuario administrador
-import { NextRequest, NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
-import { connectDB } from '@/lib/mongodb';
-import User from '@/lib/models';
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase-server'
 
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
-    
-    const { adminKey } = await request.json();
-    
-    // Clave secreta para crear admin (solo tú la conoces)
-    if (adminKey !== 'BARULOGIX_ADMIN_2025_SECRET') {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
       return NextResponse.json(
-        { error: 'Clave de administrador incorrecta' },
+        { success: false, error: 'No autorizado' },
         { status: 401 }
-      );
+      )
     }
 
-    // Verificar si ya existe un admin
-    const existingAdmin = await User.findOne({ email: 'admin@barulogix.com' });
-    if (existingAdmin) {
+    // Verificar si es admin
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile || profile.role !== 'admin') {
       return NextResponse.json(
-        { message: 'Usuario administrador ya existe', credentials: {
-          email: 'admin@barulogix.com',
-          password: 'BaruAdmin2025!'
-        }},
-        { status: 200 }
-      );
+        { success: false, error: 'Solo los administradores pueden crear usuarios' },
+        { status: 403 }
+      )
     }
 
-    // Crear usuario administrador
-    const hashedPassword = await bcrypt.hash('BaruAdmin2025!', 12);
-    
-    const adminUser = new User({
-      name: 'Administrador BaruLogix',
-      email: 'admin@barulogix.com',
-      password: hashedPassword,
-      role: 'admin',
-      company: 'BaruLogix',
-      subscription: {
-        plan: 'enterprise',
-        status: 'active',
-        startDate: new Date(),
-        endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 año
-        features: {
-          unlimitedDeliveries: true,
-          unlimitedConductors: true,
-          advancedReports: true,
-          apiAccess: true,
-          prioritySupport: true,
-          customBranding: true
-        }
-      },
-      permissions: {
-        canViewAll: true,
-        canEditAll: true,
-        canDeleteAll: true,
-        canManageUsers: true,
-        canManageSettings: true,
-        canAccessReports: true,
-        canManagePayments: true
-      }
-    });
+    const { name, email, password, role, subscription } = await request.json()
 
-    await adminUser.save();
+    if (!name || !email || !password) {
+      return NextResponse.json(
+        { success: false, error: 'Nombre, email y contraseña son requeridos' },
+        { status: 400 }
+      )
+    }
+
+    // Crear usuario en Supabase Auth usando el cliente admin
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      user_metadata: {
+        name: name
+      },
+      email_confirm: true
+    })
+
+    if (error) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 400 }
+      )
+    }
+
+    if (!data.user) {
+      return NextResponse.json(
+        { success: false, error: 'Error al crear usuario' },
+        { status: 500 }
+      )
+    }
+
+    // Actualizar perfil con rol y suscripción específicos
+    const { error: profileError } = await supabase
+      .from('user_profiles')
+      .update({
+        role: role || 'user',
+        subscription: subscription || 'basic'
+      })
+      .eq('id', data.user.id)
+
+    if (profileError) {
+      console.error('Error updating profile:', profileError)
+    }
 
     return NextResponse.json({
-      message: 'Usuario administrador creado exitosamente',
-      credentials: {
-        email: 'admin@barulogix.com',
-        password: 'BaruAdmin2025!',
-        role: 'admin',
-        features: 'Acceso completo sin restricciones'
+      success: true,
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        name: name,
+        role: role || 'user',
+        subscription: subscription || 'basic'
       }
-    }, { status: 201 });
+    })
 
   } catch (error) {
-    console.error('Error creando admin:', error);
+    console.error('Error en admin create:', error)
     return NextResponse.json(
-      { error: 'Error interno del servidor' },
+      { success: false, error: 'Error interno del servidor' },
       { status: 500 }
-    );
+    )
   }
 }
 
