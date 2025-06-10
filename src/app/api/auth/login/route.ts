@@ -5,44 +5,59 @@ export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json()
 
+    console.log('=== LOGIN ATTEMPT ===')
+    console.log('Email:', email)
+    console.log('Password length:', password?.length)
+    console.log('Timestamp:', new Date().toISOString())
+
     // Validar datos de entrada
     if (!email || !password) {
+      console.log('ERROR: Missing email or password')
       return NextResponse.json({
         success: false,
         error: 'Email y contraseña son requeridos'
       }, { status: 400 })
     }
 
-    console.log('Login attempt for email:', email)
-
     // Crear cliente de Supabase
     const supabase = createClient()
 
+    console.log('Attempting Supabase auth...')
+
     // Intentar autenticación
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password
+      email: email.trim().toLowerCase(),
+      password: password
     })
 
     if (authError) {
-      console.error('Auth error:', authError)
+      console.log('AUTH ERROR:', authError)
+      console.log('Auth error code:', authError.status)
+      console.log('Auth error message:', authError.message)
+      
       return NextResponse.json({
         success: false,
-        error: 'Credenciales inválidas'
+        error: 'Credenciales inválidas',
+        debug: {
+          authError: authError.message,
+          code: authError.status
+        }
       }, { status: 401 })
     }
 
     if (!authData.user) {
-      console.error('No user returned from auth')
+      console.log('ERROR: No user returned from auth')
       return NextResponse.json({
         success: false,
         error: 'No se pudo autenticar el usuario'
       }, { status: 401 })
     }
 
-    console.log('User authenticated:', authData.user.id)
+    console.log('AUTH SUCCESS - User ID:', authData.user.id)
+    console.log('User email from auth:', authData.user.email)
 
     // Obtener perfil del usuario
+    console.log('Fetching user profile...')
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
       .select('*')
@@ -50,7 +65,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (profileError) {
-      console.error('Profile error:', profileError)
+      console.log('PROFILE ERROR:', profileError)
       
       // Si no existe perfil, crearlo automáticamente
       console.log('Creating missing profile for user:', authData.user.id)
@@ -69,7 +84,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (createError) {
-        console.error('Create profile error:', createError)
+        console.log('CREATE PROFILE ERROR:', createError)
         
         // Intentar obtener el perfil una vez más por si se creó entre tanto
         const { data: retryProfile } = await supabase
@@ -79,7 +94,7 @@ export async function POST(request: NextRequest) {
           .single()
 
         if (retryProfile) {
-          console.log('Profile found on retry')
+          console.log('Profile found on retry:', retryProfile.id)
           return NextResponse.json({
             success: true,
             user: {
@@ -97,7 +112,10 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
           success: false,
-          error: 'Error al crear perfil de usuario'
+          error: 'Error al crear perfil de usuario',
+          debug: {
+            createError: createError.message
+          }
         }, { status: 500 })
       }
 
@@ -119,6 +137,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('Profile found:', profile.id)
+    console.log('Profile active:', profile.is_active)
 
     // Verificar que el usuario esté activo
     if (!profile.is_active) {
@@ -129,7 +148,9 @@ export async function POST(request: NextRequest) {
       }, { status: 403 })
     }
 
-    console.log('Login successful for user:', profile.id)
+    console.log('=== LOGIN SUCCESS ===')
+    console.log('User ID:', profile.id)
+    console.log('User role:', profile.role)
 
     return NextResponse.json({
       success: true,
@@ -146,10 +167,17 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error: any) {
-    console.error('Login API error:', error)
+    console.log('=== LOGIN API ERROR ===')
+    console.log('Error:', error)
+    console.log('Stack:', error.stack)
+    
     return NextResponse.json({
       success: false,
-      error: 'Error interno del servidor'
+      error: 'Error interno del servidor',
+      debug: {
+        message: error.message,
+        stack: error.stack
+      }
     }, { status: 500 })
   }
 }

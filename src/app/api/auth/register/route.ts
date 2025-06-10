@@ -5,8 +5,15 @@ export async function POST(request: NextRequest) {
   try {
     const { name, email, password } = await request.json()
 
+    console.log('=== REGISTER ATTEMPT ===')
+    console.log('Name:', name)
+    console.log('Email:', email)
+    console.log('Password length:', password?.length)
+    console.log('Timestamp:', new Date().toISOString())
+
     // Validar datos de entrada
     if (!name || !email || !password) {
+      console.log('ERROR: Missing required fields')
       return NextResponse.json({
         success: false,
         error: 'Todos los campos son requeridos'
@@ -16,6 +23,7 @@ export async function POST(request: NextRequest) {
     // Validar formato de email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
+      console.log('ERROR: Invalid email format')
       return NextResponse.json({
         success: false,
         error: 'Formato de email inválido'
@@ -24,63 +32,58 @@ export async function POST(request: NextRequest) {
 
     // Validar contraseña
     if (password.length < 6) {
+      console.log('ERROR: Password too short')
       return NextResponse.json({
         success: false,
         error: 'La contraseña debe tener al menos 6 caracteres'
       }, { status: 400 })
     }
 
-    // Crear cliente de Supabase con service role para operaciones administrativas
+    // Crear cliente de Supabase
     const supabase = createClient()
 
-    // Verificar si el usuario ya existe en auth.users
-    const { data: existingAuthUser } = await supabase.auth.admin.listUsers()
-    const userExists = existingAuthUser.users.some(user => user.email === email)
-
-    if (userExists) {
-      return NextResponse.json({
-        success: false,
-        error: 'El usuario ya existe'
-      }, { status: 409 })
-    }
-
-    // Verificar si existe en user_profiles
+    // Verificar si el usuario ya existe en user_profiles
+    console.log('Checking if user exists in profiles...')
     const { data: existingProfile } = await supabase
       .from('user_profiles')
       .select('email')
-      .eq('email', email)
+      .eq('email', email.trim().toLowerCase())
       .single()
 
     if (existingProfile) {
+      console.log('ERROR: User already exists in profiles')
       return NextResponse.json({
         success: false,
         error: 'El usuario ya existe'
       }, { status: 409 })
     }
 
-    console.log('Creating user with email:', email)
+    console.log('Creating user in Supabase Auth...')
 
     // Crear usuario en Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password,
+      email: email.trim().toLowerCase(),
+      password: password,
       options: {
         data: {
-          name: name
+          name: name.trim()
         }
       }
     })
 
     if (authError) {
-      console.error('Auth signup error:', authError)
+      console.log('AUTH SIGNUP ERROR:', authError)
       return NextResponse.json({
         success: false,
-        error: 'Error al crear usuario: ' + authError.message
+        error: 'Error al crear usuario: ' + authError.message,
+        debug: {
+          authError: authError.message
+        }
       }, { status: 400 })
     }
 
     if (!authData.user) {
-      console.error('No user returned from signup')
+      console.log('ERROR: No user returned from signup')
       return NextResponse.json({
         success: false,
         error: 'No se pudo crear el usuario'
@@ -90,9 +93,11 @@ export async function POST(request: NextRequest) {
     console.log('User created in auth.users:', authData.user.id)
 
     // Esperar un momento para que el trigger tenga tiempo de ejecutarse
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    console.log('Waiting for trigger to execute...')
+    await new Promise(resolve => setTimeout(resolve, 2000))
 
     // Verificar si el trigger creó el perfil automáticamente
+    console.log('Checking if trigger created profile...')
     const { data: autoProfile, error: autoProfileError } = await supabase
       .from('user_profiles')
       .select('*')
@@ -100,7 +105,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (autoProfile) {
-      console.log('Profile created automatically by trigger')
+      console.log('SUCCESS: Profile created automatically by trigger')
       return NextResponse.json({
         success: true,
         message: 'Usuario creado exitosamente',
@@ -115,15 +120,15 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    console.log('Trigger did not create profile, creating manually')
+    console.log('Trigger did not create profile, creating manually...')
 
     // Si el trigger no funcionó, crear perfil manualmente
     const { data: manualProfile, error: manualProfileError } = await supabase
       .from('user_profiles')
       .insert({
         id: authData.user.id,
-        email: email,
-        name: name,
+        email: email.trim().toLowerCase(),
+        name: name.trim(),
         role: 'user',
         subscription: 'basic',
         is_active: true
@@ -132,7 +137,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (manualProfileError) {
-      console.error('Manual profile creation error:', manualProfileError)
+      console.log('MANUAL PROFILE CREATION ERROR:', manualProfileError)
       
       // Si falla la creación manual, intentar obtener el perfil existente
       const { data: existingProfileRetry } = await supabase
@@ -158,19 +163,23 @@ export async function POST(request: NextRequest) {
       }
 
       // Si todo falla, eliminar el usuario de auth y reportar error
+      console.log('Deleting user from auth due to profile creation failure')
       try {
         await supabase.auth.admin.deleteUser(authData.user.id)
       } catch (deleteError) {
-        console.error('Error deleting user after profile creation failure:', deleteError)
+        console.log('Error deleting user after profile creation failure:', deleteError)
       }
 
       return NextResponse.json({
         success: false,
-        error: 'Error al crear perfil de usuario'
+        error: 'Error al crear perfil de usuario',
+        debug: {
+          profileError: manualProfileError.message
+        }
       }, { status: 500 })
     }
 
-    console.log('Profile created manually:', manualProfile.id)
+    console.log('SUCCESS: Profile created manually:', manualProfile.id)
 
     return NextResponse.json({
       success: true,
@@ -186,10 +195,17 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error: any) {
-    console.error('Register API error:', error)
+    console.log('=== REGISTER API ERROR ===')
+    console.log('Error:', error)
+    console.log('Stack:', error.stack)
+    
     return NextResponse.json({
       success: false,
-      error: 'Error interno del servidor'
+      error: 'Error interno del servidor',
+      debug: {
+        message: error.message,
+        stack: error.stack
+      }
     }, { status: 500 })
   }
 }
