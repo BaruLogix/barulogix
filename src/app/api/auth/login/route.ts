@@ -13,6 +13,8 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    console.log('Login attempt for email:', email)
+
     // Crear cliente de Supabase
     const supabase = createClient()
 
@@ -31,13 +33,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (!authData.user) {
+      console.error('No user returned from auth')
       return NextResponse.json({
         success: false,
         error: 'No se pudo autenticar el usuario'
       }, { status: 401 })
     }
 
-    // Obtener perfil del usuario (SIN restricciones RLS)
+    console.log('User authenticated:', authData.user.id)
+
+    // Obtener perfil del usuario
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
       .select('*')
@@ -46,12 +51,15 @@ export async function POST(request: NextRequest) {
 
     if (profileError) {
       console.error('Profile error:', profileError)
+      
       // Si no existe perfil, crearlo automáticamente
+      console.log('Creating missing profile for user:', authData.user.id)
+      
       const { data: newProfile, error: createError } = await supabase
         .from('user_profiles')
         .insert({
           id: authData.user.id,
-          email: authData.user.email,
+          email: authData.user.email || email,
           name: authData.user.user_metadata?.name || 'Usuario',
           role: 'user',
           subscription: 'basic',
@@ -62,11 +70,38 @@ export async function POST(request: NextRequest) {
 
       if (createError) {
         console.error('Create profile error:', createError)
+        
+        // Intentar obtener el perfil una vez más por si se creó entre tanto
+        const { data: retryProfile } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', authData.user.id)
+          .single()
+
+        if (retryProfile) {
+          console.log('Profile found on retry')
+          return NextResponse.json({
+            success: true,
+            user: {
+              id: retryProfile.id,
+              email: retryProfile.email,
+              name: retryProfile.name,
+              role: retryProfile.role,
+              isActive: retryProfile.is_active,
+              subscription: retryProfile.subscription,
+              company: retryProfile.company,
+              phone: retryProfile.phone
+            }
+          })
+        }
+
         return NextResponse.json({
           success: false,
           error: 'Error al crear perfil de usuario'
         }, { status: 500 })
       }
+
+      console.log('Profile created successfully:', newProfile.id)
 
       return NextResponse.json({
         success: true,
@@ -76,18 +111,25 @@ export async function POST(request: NextRequest) {
           name: newProfile.name,
           role: newProfile.role,
           isActive: newProfile.is_active,
-          subscription: newProfile.subscription
+          subscription: newProfile.subscription,
+          company: newProfile.company,
+          phone: newProfile.phone
         }
       })
     }
 
+    console.log('Profile found:', profile.id)
+
     // Verificar que el usuario esté activo
     if (!profile.is_active) {
+      console.log('User is inactive:', profile.id)
       return NextResponse.json({
         success: false,
         error: 'Usuario desactivado'
       }, { status: 403 })
     }
+
+    console.log('Login successful for user:', profile.id)
 
     return NextResponse.json({
       success: true,
