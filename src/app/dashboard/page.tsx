@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 
 interface User {
@@ -346,42 +347,42 @@ export default function DashboardPage() {
 
           {/* Navigation Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="bg-white overflow-hidden shadow rounded-lg hover:shadow-lg transition-shadow cursor-pointer">
+            <Link href="/deliveries" className="bg-white overflow-hidden shadow rounded-lg hover:shadow-lg transition-shadow cursor-pointer">
               <div className="p-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-2">📋 Gestionar Entregas</h3>
                 <p className="text-gray-600 text-sm">
                   Crear, editar y hacer seguimiento de entregas
                 </p>
               </div>
-            </div>
+            </Link>
 
-            <div className="bg-white overflow-hidden shadow rounded-lg hover:shadow-lg transition-shadow cursor-pointer">
+            <Link href="/conductors" className="bg-white overflow-hidden shadow rounded-lg hover:shadow-lg transition-shadow cursor-pointer">
               <div className="p-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-2">🏍️ Gestionar Conductores</h3>
                 <p className="text-gray-600 text-sm">
                   Administrar conductores y asignaciones
                 </p>
               </div>
-            </div>
+            </Link>
 
-            <div className="bg-white overflow-hidden shadow rounded-lg hover:shadow-lg transition-shadow cursor-pointer">
+            <Link href="/reports" className="bg-white overflow-hidden shadow rounded-lg hover:shadow-lg transition-shadow cursor-pointer">
               <div className="p-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-2">📊 Reportes</h3>
                 <p className="text-gray-600 text-sm">
                   Ver estadísticas y generar reportes
                 </p>
               </div>
-            </div>
+            </Link>
 
             {user.role === 'admin' && (
-              <div className="bg-white overflow-hidden shadow rounded-lg hover:shadow-lg transition-shadow cursor-pointer border-2 border-blue-200">
+              <Link href="/admin" className="bg-white overflow-hidden shadow rounded-lg hover:shadow-lg transition-shadow cursor-pointer border-2 border-blue-200">
                 <div className="p-6">
                   <h3 className="text-lg font-medium text-gray-900 mb-2">👑 Panel Admin</h3>
                   <p className="text-gray-600 text-sm">
                     Gestionar usuarios y configuración del sistema
                   </p>
                 </div>
-              </div>
+              </Link>
             )}
           </div>
 
