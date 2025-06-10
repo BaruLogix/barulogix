@@ -1,79 +1,114 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase-server'
+import { createClient } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json()
 
+    // Validar datos de entrada
     if (!email || !password) {
-      return NextResponse.json(
-        { success: false, error: 'Email y contraseña son requeridos' },
-        { status: 400 }
-      )
+      return NextResponse.json({
+        success: false,
+        error: 'Email y contraseña son requeridos'
+      }, { status: 400 })
     }
 
+    // Crear cliente de Supabase
     const supabase = createClient()
 
-    // Intentar hacer login
-    const { data, error } = await supabase.auth.signInWithPassword({
+    // Intentar autenticación
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
-      password,
+      password
     })
 
-    if (error) {
-      return NextResponse.json(
-        { success: false, error: 'Credenciales inválidas' },
-        { status: 401 }
-      )
+    if (authError) {
+      console.error('Auth error:', authError)
+      return NextResponse.json({
+        success: false,
+        error: 'Credenciales inválidas'
+      }, { status: 401 })
     }
 
-    if (!data.user) {
-      return NextResponse.json(
-        { success: false, error: 'Error en la autenticación' },
-        { status: 401 }
-      )
+    if (!authData.user) {
+      return NextResponse.json({
+        success: false,
+        error: 'No se pudo autenticar el usuario'
+      }, { status: 401 })
     }
 
-    // Obtener perfil del usuario
+    // Obtener perfil del usuario (SIN restricciones RLS)
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
       .select('*')
-      .eq('id', data.user.id)
+      .eq('id', authData.user.id)
       .single()
 
-    if (profileError || !profile) {
-      return NextResponse.json(
-        { success: false, error: 'Error al obtener perfil de usuario' },
-        { status: 500 }
-      )
+    if (profileError) {
+      console.error('Profile error:', profileError)
+      // Si no existe perfil, crearlo automáticamente
+      const { data: newProfile, error: createError } = await supabase
+        .from('user_profiles')
+        .insert({
+          id: authData.user.id,
+          email: authData.user.email,
+          name: authData.user.user_metadata?.name || 'Usuario',
+          role: 'user',
+          subscription: 'basic',
+          is_active: true
+        })
+        .select()
+        .single()
+
+      if (createError) {
+        console.error('Create profile error:', createError)
+        return NextResponse.json({
+          success: false,
+          error: 'Error al crear perfil de usuario'
+        }, { status: 500 })
+      }
+
+      return NextResponse.json({
+        success: true,
+        user: {
+          id: newProfile.id,
+          email: newProfile.email,
+          name: newProfile.name,
+          role: newProfile.role,
+          isActive: newProfile.is_active,
+          subscription: newProfile.subscription
+        }
+      })
     }
 
-    // Verificar si el usuario está activo
+    // Verificar que el usuario esté activo
     if (!profile.is_active) {
-      return NextResponse.json(
-        { success: false, error: 'Cuenta desactivada. Contacte al administrador.' },
-        { status: 403 }
-      )
+      return NextResponse.json({
+        success: false,
+        error: 'Usuario desactivado'
+      }, { status: 403 })
     }
 
     return NextResponse.json({
       success: true,
       user: {
-        id: data.user.id,
-        email: data.user.email,
+        id: profile.id,
+        email: profile.email,
         name: profile.name,
         role: profile.role,
+        isActive: profile.is_active,
         subscription: profile.subscription,
-        isActive: profile.is_active
+        company: profile.company,
+        phone: profile.phone
       }
     })
 
-  } catch (error) {
-    console.error('Error en login:', error)
-    return NextResponse.json(
-      { success: false, error: 'Error interno del servidor' },
-      { status: 500 }
-    )
+  } catch (error: any) {
+    console.error('Login API error:', error)
+    return NextResponse.json({
+      success: false,
+      error: 'Error interno del servidor'
+    }, { status: 500 })
   }
 }
 
