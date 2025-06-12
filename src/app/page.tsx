@@ -17,7 +17,10 @@ export default function Home() {
                 height={50}
                 className="rounded-full"
               />
-              <h1 className="text-2xl font-bold text-gray-900">BaruLogix</h1>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">BaruLogix</h1>
+                <p className="text-xs text-gray-500">By BaruCourier</p>
+              </div>
             </div>
             <div className="flex space-x-4">
               <Link 
